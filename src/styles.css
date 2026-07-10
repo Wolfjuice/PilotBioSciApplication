@@ -1,0 +1,268 @@
+:root{
+  --accent:#8b5e3c;
+  --accent-strong:#6d4428;
+  --muted:#f1e7dd;
+  --bg:#fbf7f3;
+  --card:#fff;
+  --radius:12px;
+  --max-width:1200px;
+}
+
+/* Base layout */
+body{
+  font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  background:var(--bg);
+  margin:0;
+  color:#222;
+}
+.container{max-width:var(--max-width); margin:0 auto; padding:1rem}
+.site-header{background:linear-gradient(90deg,#f8f6f4,#efe7df); border-bottom:1px solid rgba(0,0,0,0.06)}
+.brand{font-weight:700; color:var(--accent-strong); text-decoration:none}
+.search-input{min-width:220px}
+
+/* emperor tabs */
+.emperor-tabs { background: linear-gradient(90deg,#3b2318,#522f1f); color:#fff; }
+.emperor-tabs .nav-link{ color: rgba(255,255,255,0.95); }
+
+.emperor-tabs .nav-link{ white-space: nowrap; }
+
+/* dropdown panel basics */
+.dropdown-panel {
+  /* hidden by default (controlled by .d-block in markup) */
+  display: none;
+  pointer-events: none;                /* avoid accidental hovers when hidden */
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+/* when visible */
+.nav-item .dropdown-panel.d-block {
+  display: block;
+  pointer-events: auto;
+  opacity: 1;
+}
+
+/* make the panel card reasonably separated and prevent tiny gap issues */
+.dropdown-panel .card {
+  position: relative;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+  background: linear-gradient(180deg,#fff,#faf7f3);
+  padding: 0.5rem;
+}
+
+/* product popup: nudge left so it slightly overlaps the dropdown and remove small gap */
+.product-popup {
+  background: #fff;
+  border-radius:10px;
+  box-shadow:0 10px 28px rgba(0,0,0,0.14);
+  width: 320px;
+  transform-origin: left top;
+  /* translate left to overlap by 6px; this works even if the component uses inline left:105% */
+  transform: translateX(-6px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  opacity: 1;
+  z-index: 1400;
+  pointer-events: auto;
+}
+
+/* keep popup image rounded */
+.product-popup img{ border-radius:6px; }
+
+/* Slightly larger hit area for dropdown items to make hover easier */
+.dropdown-panel .dropdown-item {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  line-height: 1.15;
+  font-size: 0.95rem;
+}
+
+/* when popup is hidden by any reason we can fade it (controlled by JS) */
+.product-popup.hidden {
+  opacity: 0;
+  transform: translateX(-2px) scale(0.995);
+  pointer-events: none;
+}
+
+/* Ensure the popup sits above other content */
+.dropdown-panel, .product-popup, .product-popup * {
+  z-index: 1200;
+}
+
+/* general components */
+.card { border-radius: 10px; }
+.site-footer{ background:transparent; color: #6b6b6b }
+
+/* checkout */
+.checkout-hero{
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, rgba(139,94,60,0.12), rgba(241,231,221,0.7));
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.checkout-hero-inner{ padding: 18px 18px; }
+.checkout-note{
+  background: linear-gradient(180deg,#fff,#faf7f3);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.checkout-choice{ display: flex; flex-direction: column; gap: 10px; }
+.checkout-choice-row{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+.checkout-choice-row input{ transform: translateY(-1px); }
+.checkout-sticky{ position: sticky; top: 18px; }
+.checkout-success-badge{
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(139,94,60,0.14);
+  border: 1px solid rgba(0,0,0,0.06);
+  font-weight: 800;
+  color: var(--accent-strong);
+}
+
+/* small responsive tweak: ensure popup isn't off-screen on narrow screens */
+@media (max-width: 900px) {
+  .product-popup { width: 260px; transform: none; left: 0 !important; top: 8px !important; position: relative; }
+  .dropdown-panel { position: static !important; }
+}
+
+
+/* ===== Top header layout ===== */
+.topbar-fluid{
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+.topbar-grid{
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 1.25rem;
+}
+.topbar-left{ justify-self: start; }
+.topbar-center{ justify-self: center; width: 100%; display:flex; justify-content:center; }
+.topbar-right{ justify-self: end; gap: 0.6rem; }
+
+.brand{
+  font-weight: 800;
+  font-size: 1.55rem;
+  letter-spacing: 0.2px;
+}
+.brand-subtitle{
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #4a4a4a;
+  white-space: nowrap;
+}
+
+/* Centered larger search */
+.topbar-search{
+  position: relative;
+  width: min(760px, 56vw);
+}
+.topbar-search input{
+  width: 100%;
+}
+
+/* Larger header buttons */
+.header-actions .header-btn{
+  font-size: 0.98rem;
+  padding: 0.5rem 0.9rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+/* Keep header from squeezing too much on smaller screens */
+@media (max-width: 992px){
+  .topbar-grid{
+    grid-template-columns: 1fr;
+    row-gap: 0.75rem;
+  }
+  .topbar-center{ justify-content: flex-start; }
+  .topbar-search{ width: 100%; }
+  .brand-subtitle{ white-space: normal; }
+}
+
+
+/* Search dropdown sizing: match input width; larger items but keep dropdown max-height */
+.topbar-search .card{ width: 100% !important; }
+.topbar-search .list-group-item.search-result-item{
+  width: 100%;
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+.topbar-search .list-group-item.search-result-item .btn{ padding: 0.35rem 0.65rem; }
+
+
+/* CROSS BROWSER NAV FIX */
+*,*::before,*::after{ box-sizing:border-box; }
+.topbar-grid{ display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap; }
+.topbar-left{ flex:0 0 auto; }
+.topbar-center{ flex:1 1 520px; display:flex; justify-content:center; min-width:280px; }
+.topbar-right{ flex:0 0 auto; display:flex; gap:0.6rem; flex-wrap:wrap; justify-content:flex-end; }
+.topbar-search{ width:100%; max-width:760px; }
+@media (max-width:992px){ .topbar-center{ flex:1 1 100%; } .topbar-right{ width:100%; justify-content:flex-start; } }
+
+/* Emperor tabs horizontal scroll without clipping */
+
+
+@media (max-width:1400px){  }
+
+
+/* WRAP NAV FIX */
+.emperor-tabs .nav{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 0.25rem;
+}
+.emperor-tabs .nav-item{
+  flex: 0 0 auto;
+}
+@media (max-width: 1200px){
+  .emperor-tabs .nav{ justify-content: flex-start; }
+}
+
+
+/* Products mega dropdown (3-period layout) */
+.products-mega{ position:absolute; left:0; right:0; top:100%; background:#fff; border-top:1px solid rgba(0,0,0,0.12); box-shadow:0 14px 30px rgba(0,0,0,0.18); z-index:2000; }
+.products-mega-inner{ max-width: 1400px; margin:0 auto; padding: 2rem 1.25rem; display:grid; grid-template-columns: repeat(3, 1fr) 420px; gap: 2.25rem; }
+.products-mega-heading{ display:inline-block; font-weight:800; color:#0b63ce; text-decoration:none; font-size:1.15rem; }
+.products-mega-heading:hover{ text-decoration: underline; }
+.products-mega-rule{ height:1px; background: rgba(0,0,0,0.18); margin: 0.75rem 0 1rem; }
+.products-mega-list{ list-style:none; padding:0; margin:0; }
+.products-mega-link{ display:block; padding: 0.55rem 0; color:#222; text-decoration:none; font-size:1.02rem; }
+.products-mega-link:hover{ text-decoration: underline; }
+.products-mega-promo-card{ background:#e9eaec; padding: 2rem; border-radius: 6px; height: 100%; display:flex; flex-direction:column; justify-content:center; }
+.products-mega-promo-title{ font-size:1.6rem; color:#2a6f8f; font-weight:500; margin-bottom: 0.5rem; }
+.products-mega-promo-sub a{ color:#666; text-decoration:none; font-size:1.05rem; }
+.products-mega-promo-sub a:hover{ text-decoration: underline; }
+@media (max-width: 1200px){ .products-mega-inner{ grid-template-columns: 1fr; } .products-mega-promo-card{ height:auto; } }
+
+
+/* Mega dropdown background fixes (prevent hero bleed-through) */
+.products-mega{ background:#ffffff !important; }
+.products-mega-inner{ background:#ffffff !important; }
+.products-mega-col{ background:#ffffff !important; }
+.products-mega-col ul, .products-mega-col li{ background:#ffffff; }
+
+
+
+/* Solid mega dropdown block background (prevents grid-gap showing page behind) */
+.products-mega-inner{ position: relative; }
+.products-mega-inner::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:#ffffff;
+  z-index:0;
+}
+.products-mega-inner > *{ position: relative; z-index:1; }
