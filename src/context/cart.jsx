@@ -2,9 +2,6 @@ import React, { createContext, useState, useEffect } from 'react';
 
 export const CartContext = createContext();
 
-// Helper to create a unique key per variant
-const getCartItemId = (productId, sku) => `${productId}-${sku}`;
-
 export const CartProvider = ({ children }) => {
   const [items, setItems] = useState(() => {
     try {
@@ -17,50 +14,20 @@ export const CartProvider = ({ children }) => {
     localStorage.setItem('cart_v2', JSON.stringify(items));
   }, [items]);
 
-  // Modified: addToCart now accepts product, variant (optional), and qty
-  const addToCart = (product, variant = null, qty = 1) => {
-    // If no variant is provided, use the product's default price
-    const usedVariant = variant || { sku: product.id, size: 'Default', price: product.price };
-    const cartId = getCartItemId(product.id, usedVariant.sku);
-
+  const addToCart = (product) => {
     setItems(prev => {
-      const existing = prev.find(item => item.cartId === cartId);
-      if (existing) {
-        return prev.map(item =>
-          item.cartId === cartId ? { ...item, qty: item.qty + qty } : item
-        );
-      }
-      return [
-        ...prev,
-        {
-          cartId,
-          productId: product.id,
-          title: product.title,
-          image: product.image,
-          variant: usedVariant,
-          qty: qty,
-        }
-      ];
+      const found = prev.find(p => p.id === product.id);
+      if (found) return prev.map(p => p.id === product.id ? { ...p, qty: p.qty + 1 } : p);
+      return [...prev, { ...product, qty: 1 }];
     });
   };
 
-  const removeFromCart = (cartId) => setItems(prev => prev.filter(item => item.cartId !== cartId));
-
-  const updateQty = (cartId, qty) => {
-    setItems(prev => prev.map(item =>
-      item.cartId === cartId ? { ...item, qty: Math.max(1, qty) } : item
-    ));
-  };
-
+  const removeFromCart = (id) => setItems(prev => prev.filter(p => p.id !== id));
+  const updateQty = (id, qty) => setItems(prev => prev.map(p => p.id === id ? { ...p, qty: Math.max(1, qty) } : p));
   const clear = () => setItems([]);
 
-  // Compute total: sum of (variant.price * qty)
-  const total = items.reduce((sum, item) => {
-  // Prefer variant.price, fallback to item.price (for old cart items)
-    const price = item.variant?.price ?? item.price ?? 0;
-    return sum + price * item.qty;
-  }, 0);
-  const count = items.reduce((sum, item) => sum + item.qty, 0);
+  const total = items.reduce((s, it) => s + it.price * it.qty, 0);
+  const count = items.reduce((s, it) => s + it.qty, 0);
 
   return (
     <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQty, clear, total, count }}>

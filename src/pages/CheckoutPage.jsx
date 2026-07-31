@@ -30,11 +30,13 @@ export default function CheckoutPage(){
   const [delivery, setDelivery] = useState('standard')
 
   const shippingCost = useMemo(() => {
+    // simple placeholder rates
     if (delivery === 'express') return 14.99
     return 6.99
   }, [delivery])
 
   const tax = useMemo(() => {
+    // placeholder tax calc (you'll want Stripe Tax or a tax provider later)
     const rate = 0.0
     return total * rate
   }, [total])
@@ -56,16 +58,8 @@ export default function CheckoutPage(){
 
     setSubmitting(true)
     try {
-      // Compute price per item (variant price or fallback)
       const payload = {
-        items: items.map(i => ({
-          id: i.productId || i.id,
-          title: i.title,
-          price: i.variant?.price ?? i.price ?? 0,
-          qty: i.qty,
-          sku: i.variant?.sku || null,
-          size: i.variant?.size || null,
-        })),
+        items: items.map(i => ({ id: i.id, title: i.title, price: i.price, qty: i.qty })),
         shipping,
         delivery,
         currency: 'USD',
@@ -189,33 +183,26 @@ export default function CheckoutPage(){
               <h5 className="mb-3">Order summary</h5>
 
               <ul className="list-unstyled mb-3">
-                {items.map(it => {
-                  // Compute the price from variant or fallback
-                  const itemPrice = it.variant?.price ?? it.price ?? 0;
-                  return (
-                    <li key={it.cartId || it.id} className="d-flex align-items-center border rounded p-2 mb-2" style={{background:'#fff'}}>
-                      <img
-                        src={it.image}
-                        alt={it.title}
-                        style={{width:64, height:64, objectFit:'cover', borderRadius:8, marginRight:12}}
-                        onError={(e) => {
-                          if(!e.currentTarget.dataset.fallback){
-                            e.currentTarget.dataset.fallback = '1'
-                            e.currentTarget.src = '/product-images/placeholder.svg'
-                          }
-                        }}
-                      />
-                      <div className="flex-grow-1">
-                        <div className="fw-semibold">{it.title}</div>
-                        {it.variant && (
-                          <div className="text-muted small">{it.variant.size} — SKU: {it.variant.sku}</div>
-                        )}
-                        <div className="text-muted small">Qty {it.qty}</div>
-                      </div>
-                      <div className="fw-semibold">${money(itemPrice * it.qty)}</div>
-                    </li>
-                  );
-                })}
+                {items.map(it => (
+                  <li key={it.id} className="d-flex align-items-center border rounded p-2 mb-2" style={{background:'#fff'}}>
+                    <img
+                      src={it.image}
+                      alt={it.title}
+                      style={{width:64, height:64, objectFit:'cover', borderRadius:8, marginRight:12}}
+                      onError={(e) => {
+                        if(!e.currentTarget.dataset.fallback){
+                          e.currentTarget.dataset.fallback = '1'
+                          e.currentTarget.src = '/product-images/placeholder.svg'
+                        }
+                      }}
+                    />
+                    <div className="flex-grow-1">
+                      <div className="fw-semibold">{it.title}</div>
+                      <div className="text-muted small">Qty {it.qty}</div>
+                    </div>
+                    <div className="fw-semibold">${money(it.price * it.qty)}</div>
+                  </li>
+                ))}
               </ul>
 
               <div className="border-top pt-3">

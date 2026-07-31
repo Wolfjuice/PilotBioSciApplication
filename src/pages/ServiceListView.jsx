@@ -17,7 +17,7 @@ export default function ServiceListView(){
   return (
     <div>
       <div className="d-flex align-items-center mb-3">
-        <h2 className="mb-0">Our Services</h2>
+        <h2 className="mb-0">Service List View</h2>
         <div className="ms-auto">
           <input className="form-control" style={{width:280}} placeholder="Search services..." value={q} onChange={e=>setQ(e.target.value)} />
         </div>

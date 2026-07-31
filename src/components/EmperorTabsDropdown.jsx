@@ -25,7 +25,7 @@ export default function EmperorTabsDropdown(){
     { key:'products', label:'Products', kind:'products' },
     { key:'allProducts', label:'All Products', onClick: () => navigate('/all') },
     { key:'listView', label:'List View', onClick: () => navigate('/products') },
-    { key:'serviceListView', label:'Services', onClick: () => navigate('/services') },
+    { key:'serviceListView', label:'Service List View', onClick: () => navigate('/services') },
     { key:'inquiry', label:'Inquiry', onClick: () => navigate('/inquiry') }
   ]
 
