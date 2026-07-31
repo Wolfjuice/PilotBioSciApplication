@@ -62,7 +62,7 @@ export default function Header({ search, setSearch }){
       <div className="container-fluid py-2 topbar-fluid">
         <div className="topbar-grid">
           <div className="topbar-left d-flex align-items-center">
-            <Link to="/" className="brand me-3">Roman Emperors Archive</Link>
+            <Link to="/" className="brand me-3">Pilot BioSciences</Link>
             <div className="brand-subtitle">Curios &amp; Curations from Ancient Rome</div>
           </div>
 

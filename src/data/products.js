@@ -1,12 +1,48 @@
 const products = [
+  // {
+  //   "id": "prod-1",
+  //   "title": "Statues of Augustus",
+  //   "emperor": "augustus",
+  //   "description": "Statues of Augustus: Historically-informed reproduction or print related to Emperor Augustus.",
+  //   "price": 198.74,
+  //   "image": "/product-images/prod-1.jpg",
+  //   "timePeriod": "earlyEmpire"
+  // },
   {
-    "id": "prod-1",
-    "title": "Statues of Augustus",
-    "emperor": "augustus",
-    "description": "Statues of Augustus: Historically-informed reproduction or print related to Emperor Augustus.",
-    "price": 198.74,
-    "image": "/product-images/prod-1.jpg",
-    "timePeriod": "earlyEmpire"
+    id: "prod-1",
+    title: "Statues of Augustus",
+    emperor: "augustus",
+    description: "Statues of Augustus: Historically-informed reproduction or print related to Emperor Augustus.",
+    price: 198.74,
+    image: "/product-images/prod-1.jpg",
+    timePeriod: "earlyEmpire",
+    variants: [
+      {
+        sku: "A00186-100", 
+        size: "100 μg",
+        price: 198.74,
+        inStock: true,
+      },
+      {
+        sku: "A00186-200",
+        size: "200 μg",
+        price: 385.00,
+        inStock: true,
+      },
+      {
+        sku: "A00186-300",
+        size: "300 μg",
+        price: 444.00,
+        inStock: true,
+      },
+      {
+        sku: "A00186-BULK",
+        size: "Custom / Bulk",
+        price: null,  
+        inStock: true,
+        isQuote: true,
+      }
+    ]
   },
   {
     "id": "prod-2",
