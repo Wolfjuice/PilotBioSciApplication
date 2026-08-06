@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { CartProvider } from './context/cart.jsx'
 import Header from './components/Header.jsx'
 import Home from './pages/Home.jsx'
+import Footer from './components/Footer.jsx'
 const AllProducts = lazy(() => import('./pages/AllProducts.jsx'))
 const FilteredProducts = lazy(() => import('./pages/FilteredProducts.jsx'))
 const CartPage = lazy(() => import('./pages/CartPage.jsx'))
@@ -71,7 +72,8 @@ export default function App(){
         </Suspense>
       </main>
       {location.pathname !== '/' && (
-        <footer className="site-footer text-center py-3">© Roman Emporium — Curated curiosa</footer>
+        // <footer className="site-footer text-center py-3">© Roman Emporium — Curated curiosa</footer>
+        <Footer />
       )}
     </CartProvider>
   )
