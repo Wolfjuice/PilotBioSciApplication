@@ -10,6 +10,7 @@ import ProductDetailPage from './pages/ProductDetailPage.jsx'
 import EmperorTabsDropdown from './components/EmperorTabsDropdown.jsx'
 import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
+import Footer from './components/Footer.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ListView from './pages/ListView.jsx'
 import ServiceListView from './pages/ServiceListView.jsx'
@@ -59,7 +60,8 @@ export default function App(){
         </Routes>
       </main>
       {location.pathname !== '/' && (
-        <footer className="site-footer text-center py-3">© Roman Emporium — Curated curiosa</footer>
+        // <footer className="site-footer text-center py-3">© Roman Emporium — Curated curiosa</footer>
+        <Footer />
       )}
     </CartProvider>
   )
