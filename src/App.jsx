@@ -1,25 +1,35 @@
-import React, { useState } from 'react'
+import React, { useState, lazy, Suspense } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { CartProvider } from './context/cart.jsx'
 import Header from './components/Header.jsx'
 import Home from './pages/Home.jsx'
-import AllProducts from './pages/AllProducts.jsx'
-import FilteredProducts from './pages/FilteredProducts.jsx'
-import CartPage from './pages/CartPage.jsx'
-import ProductDetailPage from './pages/ProductDetailPage.jsx'
-import EmperorTabsDropdown from './components/EmperorTabsDropdown.jsx'
-import Login from './pages/Login.jsx'
-import Register from './pages/Register.jsx'
+const AllProducts = lazy(() => import('./pages/AllProducts.jsx'))
+const FilteredProducts = lazy(() => import('./pages/FilteredProducts.jsx'))
+const CartPage = lazy(() => import('./pages/CartPage.jsx'))
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage.jsx'))
+const EmperorTabsDropdown = lazy(() => import('./components/EmperorTabsDropdown.jsx'))
+const Login = lazy(() => import('./pages/Login.jsx'))
+const Register = lazy(() => import('./pages/Register.jsx'))
+const ListView = lazy(() => import('./pages/ListView.jsx'))
+const ServiceListView = lazy(() => import('./pages/ServiceListView.jsx'))
+const Inquiry = lazy(() => import('./pages/Inquiry.jsx'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'))
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage.jsx'))
+const OrderConfirmationPage = lazy(() => import('./pages/OrderConfirmationPage.jsx'))
 import ProtectedRoute from './components/ProtectedRoute.jsx'
-import ListView from './pages/ListView.jsx'
-import ServiceListView from './pages/ServiceListView.jsx'
-import Inquiry from './pages/Inquiry.jsx'
-import ForgotPassword from './pages/ForgotPassword.jsx'
-import ResetPassword from './pages/ResetPassword.jsx'
-import CheckoutPage from './pages/CheckoutPage.jsx'
-import OrderConfirmationPage from './pages/OrderConfirmationPage.jsx'
 import { slugifyTitle } from './utils/slugify.js'
 
+
+function LoadingFallback() {
+  return (
+    <div className="container py-4 text-center">
+      <div className="spinner-border" role="status">
+        <span className="visually-hidden">Loading...</span>
+      </div>
+    </div>
+  )
+}
 export default function App(){
   const [search, setSearch] = useState('')
   const navigate = useNavigate()
@@ -39,6 +49,7 @@ export default function App(){
       <Header search={search} setSearch={setSearch} />
       <EmperorTabsDropdown />
       <main className="py-0">
+        <Suspense fallback={<LoadingFallback />}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/all" element={<div className="container py-4"><AllProducts search={search} /></div>} />
@@ -57,6 +68,7 @@ export default function App(){
           <Route path="/register" element={<div className="container py-4"><Register /></div>} />
           <Route path="/product/:slug" element={<div className="container py-4"><ProductDetailPage /></div>} />
         </Routes>
+        </Suspense>
       </main>
       {location.pathname !== '/' && (
         <footer className="site-footer text-center py-3">© Roman Emporium — Curated curiosa</footer>
