@@ -93,7 +93,7 @@ async function initDb() {
     await conn.query(`CREATE TABLE IF NOT EXISTS users (
       id INT PRIMARY KEY AUTO_INCREMENT,
       username VARCHAR(255) NOT NULL UNIQUE,
-      email VARCHAR(255) NULL,
+      email VARCHAR(255) NOT NULL UNIQUE,
       password_hash VARCHAR(255) NOT NULL,
       failed_attempts INT NOT NULL DEFAULT 0,
       lockout_until BIGINT NULL,
@@ -188,8 +188,12 @@ app.post('/api/auth/register', async (req, res) => {
     const cleanEmail = (email || '').trim();
     const emailLower = cleanEmail ? cleanEmail.toLowerCase() : null;
 
-    if (!cleanUsername || !password) {
-      return res.status(400).json({ error: 'username and password required' });
+    if (!cleanUsername || !password || !emailLower) {
+      return res.status(400).json({ error: 'username, email, and password required' });
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailLower)) {
+      return res.status(400).json({ error: 'invalid email format' });
     }
 
     const pwCheck = validatePassword(password);
@@ -219,7 +223,13 @@ app.post('/api/auth/register', async (req, res) => {
     } catch (dbErr) {
       console.error('DB insert error', dbErr);
       if (dbErr && (dbErr.code === 'ER_DUP_ENTRY' || dbErr.errno === 1062)) {
-        return res.status(400).json({ error: 'username already taken' });
+        // Check which field caused the duplicate error
+        if (dbErr.message.includes('username')) {
+          return res.status(400).json({ error: 'username already taken' });
+        } else if (dbErr.message.includes('email')) {
+          return res.status(400).json({ error: 'email already registered' });
+        }
+        return res.status(400).json({ error: 'duplicate entry' });
       }
       return res.status(500).json({ error: 'internal error' });
     }
