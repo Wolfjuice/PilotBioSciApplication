@@ -19,6 +19,7 @@ import ForgotPassword from './pages/ForgotPassword.jsx'
 import ResetPassword from './pages/ResetPassword.jsx'
 import CheckoutPage from './pages/CheckoutPage.jsx'
 import OrderConfirmationPage from './pages/OrderConfirmationPage.jsx'
+import Profile from './pages/Profile.jsx'
 import { slugifyTitle } from './utils/slugify.js'
 
 export default function App(){
@@ -57,6 +58,8 @@ export default function App(){
           <Route path="/reset-password" element={<div className="container py-4"><ResetPassword /></div>} />
           <Route path="/register" element={<div className="container py-4"><Register /></div>} />
           <Route path="/product/:slug" element={<div className="container py-4"><ProductDetailPage /></div>} />
+          <Route path="profile" element={<div className="container py-4"><Profile /></div>} />
+
         </Routes>
       </main>
       {location.pathname !== '/' && (
