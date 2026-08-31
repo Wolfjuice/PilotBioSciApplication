@@ -1,79 +1,4 @@
 
-// import React, { createContext, useState, useEffect } from 'react';
-// import api from '../api';
-
-// export const AuthContext = createContext();
-
-// export function AuthProvider({ children }) {
-//   const [user, setUser] = useState(null);
-//   const [loading, setLoading] = useState(true);
-
-//   async function fetchMe() {
-//     try {
-//       setLoading(true);
-//       const res = await api.get('/api/auth/me');
-//       if (res && res.user) setUser(res.user);
-//       else setUser(null);
-//     } catch (err) {
-//       setUser(null);
-//     } finally {
-//       setLoading(false);
-//     }
-//   }
-
-//   useEffect(() => {
-//     fetchMe();
-//   }, []);
-
-//   async function login(username, password) {
-//     const res = await api.post('/api/auth/login', { username, password });
-//     if (res && res.user) setUser(res.user);
-
-//     // Refresh user info but swallow any errors so login remains a success
-//     // even if the immediate follow-up /me check fails transiently.
-//     try {
-//       await fetchMe();
-//     } catch (err) {
-//       // ignored intentionally
-//     }
-
-//     return res;
-//   }
-
-//   async function register(userOrUsername, passwordArg, emailArg) {
-//     // support either register(username, password, email) or register({ username, password, email })
-//     let username, password, email;
-//     if (userOrUsername && typeof userOrUsername === 'object') {
-//       ({ username, password, email } = userOrUsername);
-//     } else {
-//       username = userOrUsername;
-//       password = passwordArg;
-//       email = emailArg;
-//     }
-
-//     if (!username || !password) {
-//       throw new Error('Missing username or password (client)');
-//     }
-
-//     const res = await api.post('/api/auth/register', { username, password, email });
-//     if (res && res.user) {
-//       setUser(res.user);
-//     }
-//     return res;
-//   }
-
-//   async function logout() {
-//     await api.post('/api/auth/logout');
-//     setUser(null);
-//   }
-
-//   return (
-//     <AuthContext.Provider value={{ user, loading, login, register, logout, fetchMe }}>
-//       {children}
-//     </AuthContext.Provider>
-//   );
-// }
-
 
 import React, { createContext, useState, useEffect } from 'react';
 import api from '../api';
@@ -139,33 +64,41 @@ export function AuthProvider({ children }) {
 
   // UPDATED: Register accepts all new user fields
   async function register(userData) {
-    // Support both object and positional arguments for backwards compatibility
-    let registerData;
-    if (typeof userData === 'object' && !Array.isArray(userData)) {
-      registerData = userData;
-    } else {
-      // Old format: register(username, password, email)
-      // For backwards compatibility, we'll require new fields
-      throw new Error('Please provide user data as an object');
-    }
-
-    // Validate required fields
-    const required = [
-      'firstName', 'lastName', 'username', 'email', 'password',
-      'piFirstName', 'piLastName', 'organization'
-    ];
-    for (const field of required) {
-      if (!registerData[field]) {
-        throw new Error(`${field} is required`);
-      }
-    }
-
-    const res = await api.post('/api/auth/register', registerData);
-    if (res && res.user) {
-      setUser(res.user);
-    }
-    return res;
+  // Support both object and positional arguments for backwards compatibility
+  let registerData;
+  if (typeof userData === 'object' && !Array.isArray(userData)) {
+    registerData = userData;
+  } else {
+    // Old format: register(username, password, email)
+    // For backwards compatibility, we'll require new fields
+    throw new Error('Please provide user data as an object');
   }
+
+  // Validate required fields (PI names NOT required)
+  const required = [
+    'firstName', 'lastName', 'username', 'email', 'password',
+    'organization'
+  ];
+  for (const field of required) {
+    if (!registerData[field]) {
+      throw new Error(`${field} is required`);
+    }
+  }
+
+  // Optional fields - validate only if provided
+  if (registerData.piFirstName && registerData.piFirstName.trim().length < 2) {
+    throw new Error('PI first name must be at least 2 characters');
+  }
+  if (registerData.piLastName && registerData.piLastName.trim().length < 2) {
+    throw new Error('PI last name must be at least 2 characters');
+  }
+
+  const res = await api.post('/api/auth/register', registerData);
+  if (res && res.user) {
+    setUser(res.user);
+  }
+  return res;
+}
 
   // NEW: Update user profile
   async function updateProfile(profileData) {

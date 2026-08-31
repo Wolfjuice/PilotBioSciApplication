@@ -91,8 +91,8 @@ async function initDb() {
       username VARCHAR(255) NOT NULL UNIQUE,
       email VARCHAR(255) NOT NULL UNIQUE,
       password_hash VARCHAR(255) NOT NULL,
-      pi_first_name VARCHAR(255) NOT NULL,
-      pi_last_name VARCHAR(255) NOT NULL,
+      pi_first_name VARCHAR(255) NULL,
+      pi_last_name VARCHAR(255) NULL,
       organization VARCHAR(255) NOT NULL,
       failed_attempts INT NOT NULL DEFAULT 0,
       lockout_until BIGINT NULL,
@@ -245,14 +245,21 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'password is required' });
     }
 
-    const piFirstNameValidation = validateNameField(piFirstName, 'PI first name');
+    // PI names are optional - validate only if provided
+    let piFirstNameValidation = { ok: true };
+    if (piFirstName && piFirstName.trim()) {
+    piFirstNameValidation = validateNameField(piFirstName, 'PI first name');
     if (!piFirstNameValidation.ok) {
-      return res.status(400).json({ error: piFirstNameValidation.message });
+        return res.status(400).json({ error: piFirstNameValidation.message });
+    }
     }
 
-    const piLastNameValidation = validateNameField(piLastName, 'PI last name');
+    let piLastNameValidation = { ok: true };
+    if (piLastName && piLastName.trim()) {
+    piLastNameValidation = validateNameField(piLastName, 'PI last name');
     if (!piLastNameValidation.ok) {
-      return res.status(400).json({ error: piLastNameValidation.message });
+        return res.status(400).json({ error: piLastNameValidation.message });
+    }
     }
 
     const cleanOrganization = (organization || '').trim();
@@ -279,33 +286,41 @@ app.post('/api/auth/register', async (req, res) => {
           pi_first_name, pi_last_name, organization
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          firstName.trim(),
-          lastName.trim(),
-          cleanUsername,
-          emailLower,
-          hash,
-          piFirstName.trim(),
-          piLastName.trim(),
-          cleanOrganization
+        firstName.trim(),
+        lastName.trim(),
+        cleanUsername,
+        emailLower,
+        hash,
+        piFirstName ? piFirstName.trim() : null,
+        piLastName ? piLastName.trim() : null,
+        cleanOrganization
         ]
       );
 
-      const user = {
-        id: result.insertId,
-        username: cleanUsername,
-        first_name: firstName.trim(),
-        last_name: lastName.trim()
-      };
-      const token = signToken(user);
+    const user = {
+    id: result.insertId,
+    username: cleanUsername,
+    first_name: firstName.trim(),
+    last_name: lastName.trim()
+    };
+    const token = signToken(user);
 
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000
-      });
+    res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000
+    });
 
-      return res.json({ user });
+    // Return with camelCase to match frontend expectations
+    return res.json({ 
+    user: {
+        id: user.id,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name
+    }
+    });
     } catch (dbErr) {
       console.error('DB insert error', dbErr);
       if (dbErr && (dbErr.code === 'ER_DUP_ENTRY' || dbErr.errno === 1062)) {
@@ -444,14 +459,21 @@ app.put('/api/users/profile', requireAuth, async (req, res) => {
       return res.status(400).json({ error: lastNameValidation.message });
     }
 
-    const piFirstNameValidation = validateNameField(piFirstName, 'PI first name');
+   // PI names are optional - validate only if provided
+    let piFirstNameValidation = { ok: true };
+    if (piFirstName && piFirstName.trim()) {
+    piFirstNameValidation = validateNameField(piFirstName, 'PI first name');
     if (!piFirstNameValidation.ok) {
-      return res.status(400).json({ error: piFirstNameValidation.message });
+        return res.status(400).json({ error: piFirstNameValidation.message });
+    }
     }
 
-    const piLastNameValidation = validateNameField(piLastName, 'PI last name');
+    let piLastNameValidation = { ok: true };
+    if (piLastName && piLastName.trim()) {
+    piLastNameValidation = validateNameField(piLastName, 'PI last name');
     if (!piLastNameValidation.ok) {
-      return res.status(400).json({ error: piLastNameValidation.message });
+        return res.status(400).json({ error: piLastNameValidation.message });
+    }
     }
 
     const cleanOrganization = (organization || '').trim();
@@ -463,19 +485,19 @@ app.put('/api/users/profile', requireAuth, async (req, res) => {
     }
 
     await dbExecute(
-      `UPDATE users SET
+    `UPDATE users SET
         first_name = ?, last_name = ?,
         pi_first_name = ?, pi_last_name = ?,
         organization = ?
-       WHERE id = ?`,
-      [
+    WHERE id = ?`,
+    [
         firstName.trim(),
         lastName.trim(),
-        piFirstName.trim(),
-        piLastName.trim(),
+        piFirstName ? piFirstName.trim() : null,
+        piLastName ? piLastName.trim() : null,
         cleanOrganization,
         req.user.id
-      ]
+    ]
     );
 
     const user = await dbQueryOne(
