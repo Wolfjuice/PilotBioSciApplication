@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_in_production';
 
 // MySQL connection settings
+// You must provide these in server/.env (see instructions in README below)
 const DB_HOST = process.env.DB_HOST || '127.0.0.1';
 const DB_PORT = process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306;
 const DB_USER = process.env.DB_USER || 'root';
@@ -40,13 +41,16 @@ app.use(helmet({
 app.use(express.json());
 app.use(cookieParser());
 
+
 // Rate limiting
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 200
 }));
 
-// HTTPS enforcement
+// HTTPS enforcement (app-level, in addition to any host-level redirect).
+// Hostinger/most hosts sit behind a proxy, so we trust X-Forwarded-Proto
+// to determine the original protocol the client used.
 app.set('trust proxy', 1);
 app.use((req, res, next) => {
   if (process.env.NODE_ENV === 'production' && req.headers['x-forwarded-proto'] !== 'https') {
@@ -65,9 +69,11 @@ const corsOptions = {
   credentials: true
 };
 app.use(cors(corsOptions));
+
+// Ensure preflight requests succeed
 app.options('*', cors(corsOptions));
 
-// ============= MYSQL DB =============
+// ---------------- MYSQL DB ----------------
 
 const pool = mysql.createPool({
   host: DB_HOST,
@@ -81,19 +87,14 @@ const pool = mysql.createPool({
 });
 
 async function initDb() {
+  // Validate connectivity early so you get a clean error on startup.
   const conn = await pool.getConnection();
   try {
-    // UPDATED TABLE SCHEMA WITH NEW FIELDS
     await conn.query(`CREATE TABLE IF NOT EXISTS users (
       id INT PRIMARY KEY AUTO_INCREMENT,
-      first_name VARCHAR(255) NOT NULL,
-      last_name VARCHAR(255) NOT NULL,
       username VARCHAR(255) NOT NULL UNIQUE,
       email VARCHAR(255) NOT NULL UNIQUE,
       password_hash VARCHAR(255) NOT NULL,
-      pi_first_name VARCHAR(255) NULL,
-      pi_last_name VARCHAR(255) NULL,
-      organization VARCHAR(255) NOT NULL,
       failed_attempts INT NOT NULL DEFAULT 0,
       lockout_until BIGINT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -131,7 +132,7 @@ async function initDb() {
   }
 }
 
-// Small helpers
+// Small helpers to keep route handlers clean.
 async function dbQueryOne(sql, params) {
   const [rows] = await pool.query(sql, params);
   return Array.isArray(rows) && rows.length ? rows[0] : null;
@@ -143,6 +144,7 @@ async function dbExecute(sql, params) {
 }
 
 function validatePassword(password) {
+  // Minimum 8 chars, at least one upper, one lower, one number, one special
   const ok = typeof password === 'string' && /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password);
   if (ok) return { ok: true };
   return {
@@ -151,30 +153,9 @@ function validatePassword(password) {
   };
 }
 
-// VALIDATION FUNCTION FOR NEW FIELDS
-function validateNameField(name, fieldLabel) {
-  if (!name || !name.trim()) {
-    return { ok: false, message: `${fieldLabel} is required` };
-  }
-  if (name.trim().length < 2) {
-    return { ok: false, message: `${fieldLabel} must be at least 2 characters` };
-  }
-  return { ok: true };
-}
-
-function validateEmailFormat(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
 function signToken(user) {
   return jwt.sign(
-    {
-      id: user.id,
-      username: user.username,
-      firstName: user.first_name,
-      lastName: user.last_name
-    },
+    { id: user.id, username: user.username },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -198,132 +179,51 @@ function requireAuth(req, res, next) {
 
 app.use(authenticateFromCookie);
 
-// ============= AUTH ROUTES =============
+// ---------------- AUTH ROUTES ----------------
 
-// UPDATED REGISTRATION ENDPOINT WITH ALL NEW FIELDS
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const {
-      firstName,
-      lastName,
-      username,
-      email,
-      password,
-      piFirstName,
-      piLastName,
-      organization
-    } = req.body || {};
-
-    // VALIDATE ALL REQUIRED FIELDS
-    const firstNameValidation = validateNameField(firstName, 'First name');
-    if (!firstNameValidation.ok) {
-      return res.status(400).json({ error: firstNameValidation.message });
-    }
-
-    const lastNameValidation = validateNameField(lastName, 'Last name');
-    if (!lastNameValidation.ok) {
-      return res.status(400).json({ error: lastNameValidation.message });
-    }
-
+    const { username, password, email } = req.body || {};
     const cleanUsername = (username || '').trim();
-    if (!cleanUsername) {
-      return res.status(400).json({ error: 'username is required' });
-    }
-    if (cleanUsername.length < 3) {
-      return res.status(400).json({ error: 'username must be at least 3 characters' });
-    }
-
     const cleanEmail = (email || '').trim();
-    if (!cleanEmail) {
-      return res.status(400).json({ error: 'email is required' });
+    const emailLower = cleanEmail ? cleanEmail.toLowerCase() : null;
+
+    if (!cleanUsername || !password || !emailLower) {
+      return res.status(400).json({ error: 'username, email, and password required' });
     }
-    if (!validateEmailFormat(cleanEmail)) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailLower)) {
       return res.status(400).json({ error: 'invalid email format' });
     }
 
-    if (!password) {
-      return res.status(400).json({ error: 'password is required' });
-    }
-
-    // PI names are optional - validate only if provided
-    let piFirstNameValidation = { ok: true };
-    if (piFirstName && piFirstName.trim()) {
-    piFirstNameValidation = validateNameField(piFirstName, 'PI first name');
-    if (!piFirstNameValidation.ok) {
-        return res.status(400).json({ error: piFirstNameValidation.message });
-    }
-    }
-
-    let piLastNameValidation = { ok: true };
-    if (piLastName && piLastName.trim()) {
-    piLastNameValidation = validateNameField(piLastName, 'PI last name');
-    if (!piLastNameValidation.ok) {
-        return res.status(400).json({ error: piLastNameValidation.message });
-    }
-    }
-
-    const cleanOrganization = (organization || '').trim();
-    if (!cleanOrganization) {
-      return res.status(400).json({ error: 'organization is required' });
-    }
-    if (cleanOrganization.length < 2) {
-      return res.status(400).json({ error: 'organization must be at least 2 characters' });
-    }
-
-    // VALIDATE PASSWORD
     const pwCheck = validatePassword(password);
     if (!pwCheck.ok) {
       return res.status(400).json({ error: pwCheck.message });
     }
 
-    const emailLower = cleanEmail.toLowerCase();
     const hash = await bcrypt.hash(password, 10);
 
     try {
       const result = await dbExecute(
-        `INSERT INTO users (
-          first_name, last_name, username, email, password_hash,
-          pi_first_name, pi_last_name, organization
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-        firstName.trim(),
-        lastName.trim(),
-        cleanUsername,
-        emailLower,
-        hash,
-        piFirstName ? piFirstName.trim() : null,
-        piLastName ? piLastName.trim() : null,
-        cleanOrganization
-        ]
+        'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
+        [cleanUsername, emailLower, hash]
       );
 
-    const user = {
-    id: result.insertId,
-    username: cleanUsername,
-    first_name: firstName.trim(),
-    last_name: lastName.trim()
-    };
-    const token = signToken(user);
+      const user = { id: result.insertId, username: cleanUsername };
+      const token = signToken(user);
 
-    res.cookie('token', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
 
-    // Return with camelCase to match frontend expectations
-    return res.json({ 
-    user: {
-        id: user.id,
-        username: user.username,
-        firstName: user.first_name,
-        lastName: user.last_name
-    }
-    });
+      return res.json({ user });
     } catch (dbErr) {
       console.error('DB insert error', dbErr);
       if (dbErr && (dbErr.code === 'ER_DUP_ENTRY' || dbErr.errno === 1062)) {
+        // Check which field caused the duplicate error
         if (dbErr.message.includes('username')) {
           return res.status(400).json({ error: 'username already taken' });
         } else if (dbErr.message.includes('email')) {
@@ -347,10 +247,8 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'username and password required' });
     }
 
-    // UPDATED QUERY TO INCLUDE NEW FIELDS
     const row = await dbQueryOne(
-      `SELECT id, username, password_hash, first_name, last_name,
-              failed_attempts, lockout_until FROM users WHERE username = ? LIMIT 1`,
+      'SELECT id, username, password_hash, failed_attempts, lockout_until FROM users WHERE username = ? LIMIT 1',
       [cleanUsername]
     );
     if (!row) {
@@ -390,12 +288,7 @@ app.post('/api/auth/login', async (req, res) => {
     // Successful login: clear counters
     await dbExecute('UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE id = ?', [row.id]);
 
-    const user = {
-      id: row.id,
-      username: row.username,
-      first_name: row.first_name,
-      last_name: row.last_name
-    };
+    const user = { id: row.id, username: row.username };
     const token = signToken(user);
 
     res.cookie('token', token, {
@@ -417,104 +310,12 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-// UPDATED TO RETURN NEW FIELDS
 app.get('/api/auth/me', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'not authenticated' });
   res.json({ user: req.user });
 });
 
-// NEW ENDPOINT: GET FULL USER PROFILE
-// This endpoint returns all user information (not just from token)
-app.get('/api/users/profile', requireAuth, async (req, res) => {
-  try {
-    const user = await dbQueryOne(
-      `SELECT id, first_name, last_name, username, email,
-              pi_first_name, pi_last_name, organization, created_at
-       FROM users WHERE id = ? LIMIT 1`,
-      [req.user.id]
-    );
-    if (!user) {
-      return res.status(404).json({ error: 'user not found' });
-    }
-    res.json({ user });
-  } catch (err) {
-    console.error('profile error', err);
-    res.status(500).json({ error: 'internal error' });
-  }
-});
-
-// NEW ENDPOINT: UPDATE USER PROFILE
-app.put('/api/users/profile', requireAuth, async (req, res) => {
-  try {
-    const { firstName, lastName, piFirstName, piLastName, organization } = req.body || {};
-
-    // Validate all fields
-    const firstNameValidation = validateNameField(firstName, 'First name');
-    if (!firstNameValidation.ok) {
-      return res.status(400).json({ error: firstNameValidation.message });
-    }
-
-    const lastNameValidation = validateNameField(lastName, 'Last name');
-    if (!lastNameValidation.ok) {
-      return res.status(400).json({ error: lastNameValidation.message });
-    }
-
-   // PI names are optional - validate only if provided
-    let piFirstNameValidation = { ok: true };
-    if (piFirstName && piFirstName.trim()) {
-    piFirstNameValidation = validateNameField(piFirstName, 'PI first name');
-    if (!piFirstNameValidation.ok) {
-        return res.status(400).json({ error: piFirstNameValidation.message });
-    }
-    }
-
-    let piLastNameValidation = { ok: true };
-    if (piLastName && piLastName.trim()) {
-    piLastNameValidation = validateNameField(piLastName, 'PI last name');
-    if (!piLastNameValidation.ok) {
-        return res.status(400).json({ error: piLastNameValidation.message });
-    }
-    }
-
-    const cleanOrganization = (organization || '').trim();
-    if (!cleanOrganization) {
-      return res.status(400).json({ error: 'organization is required' });
-    }
-    if (cleanOrganization.length < 2) {
-      return res.status(400).json({ error: 'organization must be at least 2 characters' });
-    }
-
-    await dbExecute(
-    `UPDATE users SET
-        first_name = ?, last_name = ?,
-        pi_first_name = ?, pi_last_name = ?,
-        organization = ?
-    WHERE id = ?`,
-    [
-        firstName.trim(),
-        lastName.trim(),
-        piFirstName ? piFirstName.trim() : null,
-        piLastName ? piLastName.trim() : null,
-        cleanOrganization,
-        req.user.id
-    ]
-    );
-
-    const user = await dbQueryOne(
-      `SELECT id, first_name, last_name, username, email,
-              pi_first_name, pi_last_name, organization
-       FROM users WHERE id = ? LIMIT 1`,
-      [req.user.id]
-    );
-
-    res.json({ user });
-  } catch (err) {
-    console.error('update profile error', err);
-    res.status(500).json({ error: 'internal error' });
-  }
-});
-
-// ============= EMAIL INQUIRY =============
+// ---------------- EMAIL INQUIRY ----------------
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || 'smtp.gmail.com',
@@ -532,7 +333,16 @@ transporter.verify()
 
 app.post('/api/inquiry', async (req, res) => {
   try {
-    const { name, email, phone, company, country, productId, productTitle, message } = req.body || {};
+    const {
+      name,
+      email,
+      phone,
+      company,
+      country,
+      productId,
+      productTitle,
+      message
+    } = req.body || {};
 
     if (!email || !message) {
       return res.status(400).json({ error: 'email and message are required' });
@@ -578,7 +388,7 @@ ${message}
   }
 });
 
-// ============= ORDERS =============
+// ---------------- ORDERS (placeholder, ready for Stripe later) ----------------
 
 app.post('/api/orders', requireAuth, async (req, res) => {
   try {
@@ -587,6 +397,8 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'items required' });
     }
 
+    // IMPORTANT: For real payments, do NOT trust client prices.
+    // When you add Stripe, compute prices server-side from your products DB.
     let subtotalCents = 0;
     for (const it of items) {
       const price = Number(it?.price);
@@ -602,10 +414,7 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     const totalCents = subtotalCents + shippingCents + taxCents;
 
     const result = await dbExecute(
-      `INSERT INTO orders (
-        user_id, status, currency, subtotal_cents, shipping_cents,
-        tax_cents, total_cents, items_json, shipping_json, delivery_method
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      'INSERT INTO orders (user_id, status, currency, subtotal_cents, shipping_cents, tax_cents, total_cents, items_json, shipping_json, delivery_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         req.user.id,
         'pending_payment',
@@ -627,15 +436,16 @@ app.post('/api/orders', requireAuth, async (req, res) => {
   }
 });
 
-// ============= PASSWORD RESET =============
-
+// Generate secure token helper
 const crypto = require('crypto');
 
+// POST /api/auth/forgot-password
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ message: 'If an account exists for that email, a reset link has been sent.' });
 
+    // Always respond with the same generic message to avoid account enumeration
     const genericResponse = { message: 'If an account exists for that email, a reset link has been sent.' };
 
     const emailLower = String(email).trim().toLowerCase();
@@ -644,9 +454,10 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       return res.status(200).json(genericResponse);
     }
 
+    // create token
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const expiresAt = Date.now() + (1000 * 60 * 60);
+    const expiresAt = Date.now() + (1000 * 60 * 60); // 1 hour
 
     try {
       await dbExecute(
@@ -655,15 +466,18 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       );
     } catch (err2) {
       console.error('Failed to store reset token', err2);
+      // Still respond generically.
       return res.status(200).json(genericResponse);
     }
 
+    // build reset url - prefer FRONTEND_URL env var; if not present use request origin; otherwise default to localhost:5173
     const frontendBase = (process.env.FRONTEND_URL && process.env.FRONTEND_URL.trim())
       ? process.env.FRONTEND_URL.trim()
       : (req.get && req.get('origin')) || `http://localhost:${process.env.FRONTEND_PORT || 5173}`;
 
     const resetUrl = `${frontendBase.replace(/\/$/, '')}/reset-password?token=${token}&email=${encodeURIComponent(row.email)}`;
 
+    // send email (best-effort)
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to: row.email,
@@ -684,6 +498,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   }
 });
 
+// POST /api/auth/reset-password
 app.post('/api/auth/reset-password', async (req, res) => {
   try {
     const { token, email, newPassword } = req.body || {};
@@ -710,6 +525,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'invalid or expired token' });
     }
 
+    // update password
     const saltRounds = 12;
     const newHash = await bcrypt.hash(newPassword, saltRounds);
     try {
@@ -718,12 +534,14 @@ app.post('/api/auth/reset-password', async (req, res) => {
         [newHash, row.user_id]
       );
 
+      // delete used tokens for this user
       await dbExecute('DELETE FROM password_reset_tokens WHERE user_id = ?', [row.user_id]);
     } catch (updErr) {
       console.error('Failed to update password', updErr);
       return res.status(500).json({ error: 'internal error' });
     }
 
+    // send notification email (best-effort)
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to: row.email,
@@ -739,7 +557,8 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
-// ============= PROD CLIENT =============
+
+// ---------------- PROD CLIENT ----------------
 
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.join(__dirname, '..', 'dist');

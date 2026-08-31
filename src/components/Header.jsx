@@ -150,8 +150,11 @@ export default function Header({ search, setSearch }){
           <div className="topbar-right header-actions d-flex align-items-center">
             {user ? (
               <>
-                <span className="small text-muted me-2">Hi, {user.username}</span>
+                <span>Welcome, {user?.firstName} {user?.lastName}</span>
                 <button className="btn btn-outline-danger header-btn" onClick={logout}>Log out</button>
+                <Link to="/profile" className="btn btn-outline-secondary header-btn">
+                  My Profile
+                </Link>
               </>
             ) : (
               <>
