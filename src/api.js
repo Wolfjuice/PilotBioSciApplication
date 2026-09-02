@@ -28,7 +28,7 @@ async function request(path, options = {}) {
   }
   return data;
 }
-
+export const API_BASE_URL = BASE;
 export default {
   get: (path) => request(path, { method: 'GET' }),
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),

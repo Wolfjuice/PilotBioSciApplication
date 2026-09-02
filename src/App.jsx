@@ -20,6 +20,8 @@ import ResetPassword from './pages/ResetPassword.jsx'
 import CheckoutPage from './pages/CheckoutPage.jsx'
 import OrderConfirmationPage from './pages/OrderConfirmationPage.jsx'
 import Profile from './pages/Profile.jsx'
+import VerifyEmail from './pages/VerifyEmail';
+import VerifyEmailPending from './pages/VerifyEmailPending';
 import { slugifyTitle } from './utils/slugify.js'
 
 export default function App(){
@@ -59,7 +61,8 @@ export default function App(){
           <Route path="/register" element={<div className="container py-4"><Register /></div>} />
           <Route path="/product/:slug" element={<div className="container py-4"><ProductDetailPage /></div>} />
           <Route path="profile" element={<div className="container py-4"><Profile /></div>} />
-
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/verify-email-pending" element={<VerifyEmailPending />} />
         </Routes>
       </main>
       {location.pathname !== '/' && (

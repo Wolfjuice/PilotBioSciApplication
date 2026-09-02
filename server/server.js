@@ -1,4 +1,3 @@
-
 const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
@@ -9,6 +8,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
@@ -83,7 +83,7 @@ const pool = mysql.createPool({
 async function initDb() {
   const conn = await pool.getConnection();
   try {
-    // UPDATED TABLE SCHEMA WITH NEW FIELDS
+    // UPDATED TABLE SCHEMA WITH EMAIL VERIFICATION FIELDS
     await conn.query(`CREATE TABLE IF NOT EXISTS users (
       id INT PRIMARY KEY AUTO_INCREMENT,
       first_name VARCHAR(255) NOT NULL,
@@ -96,6 +96,9 @@ async function initDb() {
       organization VARCHAR(255) NOT NULL,
       failed_attempts INT NOT NULL DEFAULT 0,
       lockout_until BIGINT NULL,
+      email_verified BOOLEAN DEFAULT FALSE,
+      email_verification_token VARCHAR(255),
+      email_token_expires_at BIGINT,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB;`);
 
@@ -167,6 +170,12 @@ function validateEmailFormat(email) {
   return emailRegex.test(email);
 }
 
+function generateVerificationToken() {
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  return { token, tokenHash };
+}
+
 function signToken(user) {
   return jwt.sign(
     {
@@ -200,7 +209,6 @@ app.use(authenticateFromCookie);
 
 // ============= AUTH ROUTES =============
 
-// UPDATED REGISTRATION ENDPOINT WITH ALL NEW FIELDS
 app.post('/api/auth/register', async (req, res) => {
   try {
     const {
@@ -245,97 +253,149 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'password is required' });
     }
 
-    // PI names are optional - validate only if provided
-    let piFirstNameValidation = { ok: true };
-    if (piFirstName && piFirstName.trim()) {
-    piFirstNameValidation = validateNameField(piFirstName, 'PI first name');
-    if (!piFirstNameValidation.ok) {
-        return res.status(400).json({ error: piFirstNameValidation.message });
-    }
-    }
-
-    let piLastNameValidation = { ok: true };
-    if (piLastName && piLastName.trim()) {
-    piLastNameValidation = validateNameField(piLastName, 'PI last name');
-    if (!piLastNameValidation.ok) {
-        return res.status(400).json({ error: piLastNameValidation.message });
-    }
-    }
-
-    const cleanOrganization = (organization || '').trim();
-    if (!cleanOrganization) {
-      return res.status(400).json({ error: 'organization is required' });
-    }
-    if (cleanOrganization.length < 2) {
-      return res.status(400).json({ error: 'organization must be at least 2 characters' });
-    }
-
-    // VALIDATE PASSWORD
     const pwCheck = validatePassword(password);
     if (!pwCheck.ok) {
       return res.status(400).json({ error: pwCheck.message });
     }
 
-    const emailLower = cleanEmail.toLowerCase();
-    const hash = await bcrypt.hash(password, 10);
+    const orgValidation = validateNameField(organization, 'Organization');
+    if (!orgValidation.ok) {
+      return res.status(400).json({ error: orgValidation.message });
+    }
 
-    try {
-      const result = await dbExecute(
-        `INSERT INTO users (
-          first_name, last_name, username, email, password_hash,
-          pi_first_name, pi_last_name, organization
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
+    // PI names are optional - validate only if provided
+    let piFirstNameValidation = { ok: true };
+    if (piFirstName && piFirstName.trim()) {
+      piFirstNameValidation = validateNameField(piFirstName, 'PI first name');
+      if (!piFirstNameValidation.ok) {
+        return res.status(400).json({ error: piFirstNameValidation.message });
+      }
+    }
+
+    let piLastNameValidation = { ok: true };
+    if (piLastName && piLastName.trim()) {
+      piLastNameValidation = validateNameField(piLastName, 'PI last name');
+      if (!piLastNameValidation.ok) {
+        return res.status(400).json({ error: piLastNameValidation.message });
+      }
+    }
+
+    // Check for duplicate username/email BEFORE creating user
+    const existingUser = await dbQueryOne(
+      'SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1',
+      [cleanUsername, cleanEmail]
+    );
+    if (existingUser) {
+      return res.status(409).json({ error: 'Registration failed' });
+    }
+
+    // Hash password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Generate email verification token
+    const { token: verificationToken, tokenHash } = generateVerificationToken();
+    const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+
+    // Insert user with email_verified = false
+    const result = await dbExecute(
+      `INSERT INTO users (
+        first_name,
+        last_name,
+        username,
+        email,
+        password_hash,
+        pi_first_name,
+        pi_last_name,
+        organization,
+        email_verified,
+        email_verification_token,
+        email_token_expires_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
         firstName.trim(),
         lastName.trim(),
         cleanUsername,
-        emailLower,
-        hash,
-        piFirstName ? piFirstName.trim() : null,
-        piLastName ? piLastName.trim() : null,
-        cleanOrganization
-        ]
-      );
+        cleanEmail,
+        hashedPassword,
+        piFirstName?.trim() || null,
+        piLastName?.trim() || null,
+        organization.trim(),
+        false,
+        tokenHash,
+        expiresAt
+      ]
+    );
 
-    const user = {
-    id: result.insertId,
-    username: cleanUsername,
-    first_name: firstName.trim(),
-    last_name: lastName.trim()
+    // Send verification email
+    const frontendBase = (process.env.FRONTEND_URL && process.env.FRONTEND_URL.trim())
+      ? process.env.FRONTEND_URL.trim()
+      : (req.get && req.get('origin')) || `http://localhost:${process.env.FRONTEND_PORT || 5173}`;
+
+    const verifyUrl = `${frontendBase.replace(/\/$/, '')}/verify-email?token=${verificationToken}&email=${encodeURIComponent(cleanEmail)}`;
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+      to: cleanEmail,
+      subject: 'Verify Your Email Address - PilotBioSci',
+      text: `Welcome to PilotBioSci!\n\nPlease verify your email by clicking this link:\n${verifyUrl}\n\nThis link expires in 24 hours.\n\nIf you did not create this account, please ignore this email.`,
+      html: `
+        <h2>Welcome to PilotBioSci!</h2>
+        <p>Please verify your email by clicking the link below:</p>
+        <p><a href="${verifyUrl}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">Verify Email</a></p>
+        <p>This link expires in 24 hours.</p>
+        <p>If you did not create this account, please ignore this email.</p>
+      `
     };
-    const token = signToken(user);
 
-    res.cookie('token', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    transporter.sendMail(mailOptions)
+      .then(info => console.log('Verification email sent:', info.messageId))
+      .catch(err => console.warn('Verification email error:', err?.message));
 
-    // Return with camelCase to match frontend expectations
-    return res.json({ 
-    user: {
-        id: user.id,
-        username: user.username,
-        firstName: user.first_name,
-        lastName: user.last_name
-    }
+    return res.status(201).json({
+      ok: true,
+      message: 'Registration successful. Please check your email to verify your account.'
     });
-    } catch (dbErr) {
-      console.error('DB insert error', dbErr);
-      if (dbErr && (dbErr.code === 'ER_DUP_ENTRY' || dbErr.errno === 1062)) {
-        if (dbErr.message.includes('username')) {
-          return res.status(400).json({ error: 'username already taken' });
-        } else if (dbErr.message.includes('email')) {
-          return res.status(400).json({ error: 'email already registered' });
-        }
-        return res.status(400).json({ error: 'duplicate entry' });
-      }
-      return res.status(500).json({ error: 'internal error' });
-    }
   } catch (err) {
-    console.error('register error', err);
-    res.status(500).json({ error: 'internal error' });
+    console.error('Registration error', err);
+    return res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// EMAIL VERIFICATION ENDPOINT
+app.post('/api/auth/verify-email', async (req, res) => {
+  try {
+    const { token, email } = req.body || {};
+    
+    if (!token || !email) {
+      return res.status(400).json({ error: 'Invalid verification request' });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const emailLower = email.trim().toLowerCase();
+
+    const user = await dbQueryOne(
+      `SELECT id, email_verified FROM users 
+       WHERE email = ? AND email_verification_token = ? 
+       AND email_token_expires_at > ? LIMIT 1`,
+      [emailLower, tokenHash, Date.now()]
+    );
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired verification link' });
+    }
+
+    // Mark email as verified
+    await dbExecute(
+      `UPDATE users SET email_verified = TRUE, email_verification_token = NULL, 
+       email_token_expires_at = NULL WHERE id = ?`,
+      [user.id]
+    );
+
+    return res.json({ ok: true, message: 'Email verified successfully' });
+  } catch (err) {
+    console.error('Email verification error', err);
+    return res.status(500).json({ error: 'Verification failed' });
   }
 });
 
@@ -347,14 +407,23 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'username and password required' });
     }
 
-    // UPDATED QUERY TO INCLUDE NEW FIELDS
+    // FIXED: Include ALL required fields in the query
     const row = await dbQueryOne(
-      `SELECT id, username, password_hash, first_name, last_name,
+      `SELECT id, username, password_hash, first_name, last_name, email_verified,
               failed_attempts, lockout_until FROM users WHERE username = ? LIMIT 1`,
       [cleanUsername]
     );
+
     if (!row) {
-      return res.status(400).json({ error: 'invalid username or password' });
+      return res.status(401).json({ error: 'invalid username or password' });
+    }
+
+    // CHECK EMAIL VERIFICATION STATUS
+    if (!row.email_verified) {
+      return res.status(403).json({ 
+        error: 'Please verify your email before logging in',
+        emailNotVerified: true 
+      });
     }
 
     // Lockout enforcement
@@ -405,7 +474,15 @@ app.post('/api/auth/login', async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
-    return res.json({ user });
+    // FIXED: Return user data in camelCase to match frontend expectations
+    return res.json({
+      user: {
+        id: user.id,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name
+      }
+    });
   } catch (err) {
     console.error('login error', err);
     return res.status(500).json({ error: 'internal error' });
@@ -417,14 +494,12 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-// UPDATED TO RETURN NEW FIELDS
 app.get('/api/auth/me', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'not authenticated' });
   res.json({ user: req.user });
 });
 
 // NEW ENDPOINT: GET FULL USER PROFILE
-// This endpoint returns all user information (not just from token)
 app.get('/api/users/profile', requireAuth, async (req, res) => {
   try {
     const user = await dbQueryOne(
@@ -459,21 +534,21 @@ app.put('/api/users/profile', requireAuth, async (req, res) => {
       return res.status(400).json({ error: lastNameValidation.message });
     }
 
-   // PI names are optional - validate only if provided
+    // PI names are optional - validate only if provided
     let piFirstNameValidation = { ok: true };
     if (piFirstName && piFirstName.trim()) {
-    piFirstNameValidation = validateNameField(piFirstName, 'PI first name');
-    if (!piFirstNameValidation.ok) {
+      piFirstNameValidation = validateNameField(piFirstName, 'PI first name');
+      if (!piFirstNameValidation.ok) {
         return res.status(400).json({ error: piFirstNameValidation.message });
-    }
+      }
     }
 
     let piLastNameValidation = { ok: true };
     if (piLastName && piLastName.trim()) {
-    piLastNameValidation = validateNameField(piLastName, 'PI last name');
-    if (!piLastNameValidation.ok) {
+      piLastNameValidation = validateNameField(piLastName, 'PI last name');
+      if (!piLastNameValidation.ok) {
         return res.status(400).json({ error: piLastNameValidation.message });
-    }
+      }
     }
 
     const cleanOrganization = (organization || '').trim();
@@ -485,19 +560,19 @@ app.put('/api/users/profile', requireAuth, async (req, res) => {
     }
 
     await dbExecute(
-    `UPDATE users SET
+      `UPDATE users SET
         first_name = ?, last_name = ?,
         pi_first_name = ?, pi_last_name = ?,
         organization = ?
-    WHERE id = ?`,
-    [
+      WHERE id = ?`,
+      [
         firstName.trim(),
         lastName.trim(),
         piFirstName ? piFirstName.trim() : null,
         piLastName ? piLastName.trim() : null,
         cleanOrganization,
         req.user.id
-    ]
+      ]
     );
 
     const user = await dbQueryOne(
@@ -628,8 +703,6 @@ app.post('/api/orders', requireAuth, async (req, res) => {
 });
 
 // ============= PASSWORD RESET =============
-
-const crypto = require('crypto');
 
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {

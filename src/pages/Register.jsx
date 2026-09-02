@@ -200,7 +200,8 @@ export default function Register() {
         piLastName: formData.piLastName.trim(),
         organization: formData.organization.trim()
       });
-      nav('/');
+      // Navigate to verification pending page instead of home
+      nav('/verify-email-pending', { state: { email: formData.email.trim() } });
     } catch (err) {
       console.error('REGISTER: error', err);
       const msg = err?.body?.error || err.message || 'Registration failed';
